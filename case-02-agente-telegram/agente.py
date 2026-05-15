@@ -28,7 +28,7 @@ load_dotenv()
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
 TELEGRAM_TOKEN = os.getenv("TELEGRAM", "")
 CHAT_ID        = os.getenv("CHAT_ID", "")
-MODEL          = "gemini-2.0-flash-lite"   # Free tier: 15 RPM, 1M tokens/dia
+MODEL          = "gemini-2.0-flash"   # Free tier: 15 RPM, 1M tokens/dia
 MAX_TOOL_ITER  = 10
 
 

@@ -131,9 +131,9 @@ if pagina == "🛒 Vendas":
     df = df_vendas if mes_sel == "Todos" else df_vendas[df_vendas["mes_venda"] == mes_sel]
 
     # ── KPIs ─────────────────────────────────────────────────────────────────
-    receita_total = df["receita"].sum()
+    receita_total = df["receita_total"].sum()
     total_vendas  = len(df)
-    ticket_medio  = df["receita"].mean() if total_vendas > 0 else 0
+    ticket_medio  = df["receita_total"].mean() if total_vendas > 0 else 0
     clientes_unicos = df["id_cliente"].nunique()
 
     k1, k2, k3, k4 = st.columns(4)
@@ -145,9 +145,9 @@ if pagina == "🛒 Vendas":
     st.markdown("---")
 
     # ── Gráfico 1: Receita diária ─────────────────────────────────────────────
-    df_dia = df.groupby("data_venda")["receita"].sum().reset_index().sort_values("data_venda")
+    df_dia = df.groupby("data_venda")["receita_total"].sum().reset_index().sort_values("data_venda")
     fig1 = px.line(
-        df_dia, x="data_venda", y="receita",
+        df_dia, x="data_venda", y="receita_total",
         color_discrete_sequence=[COLORS["primary"]],
     )
     fig1.update_traces(line_width=2.5, fill="tozeroy",
@@ -160,13 +160,13 @@ if pagina == "🛒 Vendas":
 
     # ── Gráfico 2: Receita por dia da semana ──────────────────────────────────
     ordem_dia = ["Segunda","Terça","Quarta","Quinta","Sexta","Sábado","Domingo"]
-    df_sem = df.groupby("dia_semana_nome")["receita"].sum().reset_index()
+    df_sem = df.groupby("dia_semana_nome")["receita_total"].sum().reset_index()
     df_sem["dia_semana_nome"] = pd.Categorical(df_sem["dia_semana_nome"], categories=ordem_dia, ordered=True)
     df_sem = df_sem.sort_values("dia_semana_nome")
 
     with col_g2:
         fig2 = px.bar(
-            df_sem, x="dia_semana_nome", y="receita",
+            df_sem, x="dia_semana_nome", y="receita_total",
             color_discrete_sequence=[COLORS["secondary"]],
         )
         apply_layout(fig2, "📅 Receita por Dia da Semana")
@@ -189,10 +189,10 @@ if pagina == "🛒 Vendas":
 
     # ── Gráfico 4: Receita por canal ──────────────────────────────────────────
     col_g4, col_g5 = st.columns(2)
-    df_canal = df.groupby("canal_venda")["receita"].sum().reset_index()
+    df_canal = df.groupby("canal_venda")["receita_total"].sum().reset_index()
     with col_g4:
         fig4 = px.pie(
-            df_canal, names="canal_venda", values="receita",
+            df_canal, names="canal_venda", values="receita_total",
             color_discrete_sequence=COLORS["chart"],
             hole=0.45,
         )
@@ -200,10 +200,10 @@ if pagina == "🛒 Vendas":
         st.plotly_chart(fig4, use_container_width=True)
 
     # ── Gráfico 5: Top categorias ─────────────────────────────────────────────
-    df_cat = df.groupby("categoria")["receita"].sum().reset_index().sort_values("receita", ascending=True).tail(8)
+    df_cat = df.groupby("categoria")["receita_total"].sum().reset_index().sort_values("receita_total", ascending=True).tail(8)
     with col_g5:
         fig5 = px.bar(
-            df_cat, x="receita", y="categoria", orientation="h",
+            df_cat, x="receita_total", y="categoria", orientation="h",
             color_discrete_sequence=[COLORS["primary"]],
         )
         apply_layout(fig5, "🏷️ Top Categorias por Receita")

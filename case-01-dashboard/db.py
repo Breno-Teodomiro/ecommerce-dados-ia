@@ -6,6 +6,7 @@ import os
 import duckdb
 import pandas as pd
 import psycopg2
+import streamlit as st
 from pathlib import Path
 from dotenv import load_dotenv
 
@@ -168,12 +169,19 @@ def get_conn() -> duckdb.DuckDBPyConnection:
     return conn
 
 
+@st.cache_data(ttl=600)
 def query(sql: str) -> pd.DataFrame:
-    """Executa uma query SQL e retorna DataFrame (Supabase se configurado, senão DuckDB)."""
+    """Executa uma query SQL e retorna DataFrame (Supabase se configurado, senão DuckDB).
+    Utiliza cache para evitar esgotamento de conexões no Supabase (timeout/OperationalError)."""
     if POSTGRES_URL:
-        conn = psycopg2.connect(POSTGRES_URL)
-        df = pd.read_sql_query(sql, conn)
-        conn.close()
+        # Usa URL do sqlalchemy para pandas (evita warning e lida melhor com transações)
+        # postgresql:// -> postgresql+psycopg2://
+        url_alchemy = POSTGRES_URL.replace("postgresql://", "postgresql+psycopg2://")
+        from sqlalchemy import create_engine
+        engine = create_engine(url_alchemy, pool_pre_ping=True)
+        with engine.connect() as conn:
+            df = pd.read_sql_query(sql, conn)
+        engine.dispose()
         return df
     else:
         conn = get_conn()

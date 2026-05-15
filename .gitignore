@@ -1,0 +1,12 @@
+# Ignorar credenciais e arquivos gerados
+.env
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+relatorio_*.md
+*.db
+*.duckdb
+.DS_Store
+Thumbs.db
+.streamlit/secrets.toml

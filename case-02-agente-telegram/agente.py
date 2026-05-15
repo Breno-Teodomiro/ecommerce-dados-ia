@@ -1,10 +1,10 @@
 """
-agente.py — Agente de dados com Google Gemini API (gratuito).
-Usa o novo SDK google-genai com gemini-1.5-flash (free tier generoso).
+agente.py — Agente de dados com Groq API (Llama 3).
+Usa o SDK oficial da Groq para chat e function calling.
 
 Funções:
-  chat(pergunta)       → Gemini + function calling SQL → resposta em português
-  gerar_relatorio()    → 4 queries fixas → Gemini → relatório Markdown
+  chat(pergunta)       → Groq + function calling SQL → resposta em português
+  gerar_relatorio()    → 4 queries fixas → Groq → relatório Markdown
   enviar_telegram()    → API HTTP do Telegram (sem bot rodando)
 
 Uso standalone:
@@ -16,8 +16,7 @@ import json
 import urllib.request
 from datetime import datetime, date
 
-from google import genai
-from google.genai import types
+from groq import Groq
 import pandas as pd
 from dotenv import load_dotenv
 
@@ -25,10 +24,10 @@ from db import execute_query, get_schema
 
 load_dotenv()
 
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
+GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
 TELEGRAM_TOKEN = os.getenv("TELEGRAM", "")
 CHAT_ID        = os.getenv("CHAT_ID", "")
-MODEL          = "gemini-2.0-flash"   # Free tier: 15 RPM, 1M tokens/dia
+MODEL          = "llama3-70b-8192"   # Groq Free Tier model
 MAX_TOOL_ITER  = 10
 
 
@@ -38,33 +37,34 @@ def _log(msg: str):
 
 
 def _get_client():
-    return genai.Client(api_key=GEMINI_API_KEY)
+    return Groq(api_key=GROQ_API_KEY)
 
 
 # ─── Tool definition ─────────────────────────────────────────────────────────
-TOOL_SQL = types.Tool(
-    function_declarations=[
-        types.FunctionDeclaration(
-            name="executar_sql",
-            description="Executa query SQL SELECT no banco de dados do e-commerce.",
-            parameters=types.Schema(
-                type="OBJECT",
-                properties={
-                    "sql": types.Schema(
-                        type="STRING",
-                        description="Query SQL SELECT ou WITH para executar.",
-                    )
+tools = [
+    {
+        "type": "function",
+        "function": {
+            "name": "executar_sql",
+            "description": "Executa query SQL SELECT no banco de dados do e-commerce.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "sql": {
+                        "type": "string",
+                        "description": "Query SQL SELECT ou WITH para executar.",
+                    }
                 },
-                required=["sql"],
-            ),
-        )
-    ]
-)
+                "required": ["sql"],
+            },
+        },
+    }
+]
 
 
 # ─── Chat livre ───────────────────────────────────────────────────────────────
 def chat(pergunta: str) -> str:
-    """Responde uma pergunta usando Gemini + function calling SQL."""
+    """Responde uma pergunta usando Groq + function calling SQL."""
     client = _get_client()
 
     system_prompt = f"""Você é um analista de dados de um e-commerce brasileiro.
@@ -75,60 +75,48 @@ Seja conciso e direto. Use emojis para tornar a resposta mais amigável.
 
 {get_schema()}"""
 
-    config = types.GenerateContentConfig(
-        system_instruction=system_prompt,
-        tools=[TOOL_SQL],
-    )
-
-    messages = [types.Content(role="user", parts=[types.Part(text=pergunta)])]
+    messages = [
+        {"role": "system", "content": system_prompt},
+        {"role": "user", "content": pergunta}
+    ]
 
     for _ in range(MAX_TOOL_ITER):
-        response = client.models.generate_content(
+        response = client.chat.completions.create(
             model=MODEL,
-            contents=messages,
-            config=config,
+            messages=messages,
+            tools=tools,
+            tool_choice="auto"
         )
+        
+        response_message = response.choices[0].message
+        
+        # Se não há tool calls, retornar o texto final
+        if not response_message.tool_calls:
+            return response_message.content or "Não consegui gerar uma resposta."
 
-        # Coletar function calls
-        func_calls = [
-            part.function_call
-            for part in response.candidates[0].content.parts
-            if part.function_call
-        ]
-
-        # Sem function calls → retornar texto final
-        if not func_calls:
-            texto = ""
-            for part in response.candidates[0].content.parts:
-                if hasattr(part, "text") and part.text:
-                    texto += part.text
-            return texto.strip() or "Não consegui gerar uma resposta."
-
-        # Adicionar resposta do modelo ao histórico
-        messages.append(response.candidates[0].content)
+        # Adicionar a mensagem do assistente (incluindo tool_calls) ao histórico
+        messages.append(response_message)
 
         # Processar cada function call
-        tool_parts = []
-        for fc in func_calls:
-            sql = fc.args.get("sql", "")
-            _log(f"Function call: executar_sql({sql[:80]}...)")
-
-            try:
-                df = execute_query(sql)
-                resultado = df.to_markdown(index=False) if not df.empty else "Query retornou 0 linhas."
-            except Exception as e:
-                resultado = f"Erro: {e}"
-
-            tool_parts.append(
-                types.Part(
-                    function_response=types.FunctionResponse(
-                        name="executar_sql",
-                        response={"result": resultado},
-                    )
-                )
-            )
-
-        messages.append(types.Content(role="user", parts=tool_parts))
+        for tool_call in response_message.tool_calls:
+            function_name = tool_call.function.name
+            function_args = json.loads(tool_call.function.arguments)
+            
+            if function_name == "executar_sql":
+                sql = function_args.get("sql", "")
+                _log(f"Function call: executar_sql({sql[:80]}...)")
+                try:
+                    df = execute_query(sql)
+                    resultado = df.to_markdown(index=False) if not df.empty else "Query retornou 0 linhas."
+                except Exception as e:
+                    resultado = f"Erro ao executar SQL: {e}"
+                
+                messages.append({
+                    "tool_call_id": tool_call.id,
+                    "role": "tool",
+                    "name": function_name,
+                    "content": resultado,
+                })
 
     return "⚠️ Limite de iterações atingido. Tente reformular a pergunta."
 
@@ -222,15 +210,17 @@ Gere:
 3. Seção Customer Success
 4. Seção Pricing"""
 
-    _log("Enviando para Gemini API...")
+    _log("Enviando para Groq API...")
     try:
-        config = types.GenerateContentConfig(system_instruction=system_prompt)
-        response = client.models.generate_content(
+        response = client.chat.completions.create(
             model=MODEL,
-            contents=user_prompt,
-            config=config,
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt}
+            ],
+            temperature=0.3
         )
-        relatorio = response.text
+        relatorio = response.choices[0].message.content
     except Exception as e:
         relatorio = (
             f"# Relatório Diário\nData: {date.today()}\n\n"

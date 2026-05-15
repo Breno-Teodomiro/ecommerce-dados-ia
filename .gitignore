@@ -10,3 +10,5 @@ relatorio_*.md
 .DS_Store
 Thumbs.db
 .streamlit/secrets.toml
+venv/
+.venv/

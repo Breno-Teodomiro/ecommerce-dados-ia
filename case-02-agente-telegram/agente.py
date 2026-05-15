@@ -27,7 +27,7 @@ load_dotenv()
 GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
 TELEGRAM_TOKEN = os.getenv("TELEGRAM", "")
 CHAT_ID        = os.getenv("CHAT_ID", "")
-MODEL          = "llama3-70b-8192"   # Groq Free Tier model
+MODEL          = "llama-3.3-70b-versatile"   # Groq Free Tier model
 MAX_TOOL_ITER  = 10
 
 

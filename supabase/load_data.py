@@ -25,7 +25,7 @@ load_dotenv(Path(__file__).parent.parent / "case-02-agente-telegram" / ".env")
 
 POSTGRES_URL = os.getenv("POSTGRES_URL", "")
 if not POSTGRES_URL:
-    print("❌ POSTGRES_URL não configurado no .env")
+    print("[ERRO] POSTGRES_URL não configurado no .env")
     sys.exit(1)
 
 BASE_DIR     = Path(__file__).parent.parent / "arquivos_parquet"
@@ -140,7 +140,7 @@ def load_to_postgres(df: pd.DataFrame, schema: str, table: str, conn):
 
     # Truncar tabela
     cur.execute(f"TRUNCATE TABLE {full_table}")
-    print(f"  ✂️  {full_table} truncada")
+    print(f"  -> {full_table} truncada")
 
     # Montar colunas e valores
     cols = list(df.columns)
@@ -149,27 +149,27 @@ def load_to_postgres(df: pd.DataFrame, schema: str, table: str, conn):
     sql = f"INSERT INTO {full_table} ({', '.join(cols)}) VALUES %s"
     execute_values(cur, sql, values, page_size=500)
     conn.commit()
-    print(f"  ✅  {len(df)} linhas inseridas em {full_table}")
+    print(f"  -> {len(df)} linhas inseridas em {full_table}")
     cur.close()
 
 
 def main():
-    print("🔄 Calculando views gold via DuckDB...")
+    print("[INICIANDO] Calculando views gold via DuckDB...")
     df_vendas, df_clientes, df_pricing = build_gold_dfs()
     print(f"  vendas_temporais:      {len(df_vendas)} linhas")
     print(f"  clientes_segmentacao:  {len(df_clientes)} linhas")
     print(f"  precos_competitividade:{len(df_pricing)} linhas")
 
-    print("\n🔌 Conectando ao Supabase...")
+    print("\n[CONECTANDO] Conectando ao Supabase...")
     pg = psycopg2.connect(POSTGRES_URL)
 
-    print("\n📤 Carregando dados no Supabase...")
+    print("\n[CARREGANDO] Carregando dados no Supabase...")
     load_to_postgres(df_vendas,   "public_gold_sales",   "vendas_temporais",       pg)
     load_to_postgres(df_clientes, "public_gold_cs",      "clientes_segmentacao",   pg)
     load_to_postgres(df_pricing,  "public_gold_pricing", "precos_competitividade", pg)
 
     pg.close()
-    print("\n🎉 Carga concluída com sucesso!")
+    print("\n[SUCESSO] Carga concluída com sucesso!")
 
 
 if __name__ == "__main__":
